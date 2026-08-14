@@ -7,10 +7,11 @@ fn main() {
     let input = input.trim_end();
 
     let program = vec![
-        Instructions::Split(1, 3),
-        Instructions::Char(b'a'),
+        Instructions::Split(3, 1),
+        Instructions::Any,
         Instructions::Jmp(0),
-        Instructions::Char(b'b'),
+        Instructions::Char(b'a'),
+        Instructions::Split(3, 5),
         Instructions::Match,
     ];
 

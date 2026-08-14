@@ -4,6 +4,7 @@ pub enum Instructions {
     Jmp(usize), // usize as target index
     Split(usize, usize),
     Match,
+    Any,
 }
 
 /// Recursive function utilized to lazily add threads to the list and sets the base case as either CHAR or MATCH
@@ -23,7 +24,7 @@ fn add_thread(
     }
     visited.push(pc);
     match program[pc] {
-        Instructions::Char(_) | Instructions::Match => {
+        Instructions::Char(_) | Instructions::Match | Instructions::Any => {
             list.push(pc);
         } //base case
         Instructions::Jmp(target) => {
@@ -60,10 +61,36 @@ pub fn run(program: &[Instructions], input: &str) -> bool {
         // PC is an index into the Vec to indicate the instruction we are currently on
 
         for &pc in &c_list {
-            if let Instructions::Char(expected) = program[pc]
-                && input.as_bytes().get(sp) == Some(&expected)
-            {
-                add_thread(&mut n_list, &mut visited, pc + 1, program);
+            // if let Instructions::Char(expected) = program[pc]
+            //     && input.as_bytes().get(sp) == Some(&expected)
+            // {
+            //     add_thread(&mut n_list, &mut visited, pc + 1, program);
+            // }
+            // if let Instructions::Any = program[pc]
+            //     && input.as_bytes().get(sp).is_some()
+            // {
+            //     add_thread(&mut n_list, &mut visited, pc + 1, program);
+            // }
+
+            match program[pc] {
+                Instructions::Char(c) => {
+                    if input.as_bytes().get(sp) == Some(&c) {
+                        add_thread(&mut n_list, &mut visited, pc + 1, program);
+                    }
+                }
+
+                Instructions::Any => {
+                    if input.as_bytes().get(sp).is_some() {
+                        add_thread(&mut n_list, &mut visited, pc + 1, program);
+                    }
+                }
+                Instructions::Split(_, _) => {
+                    unreachable!() // based on add_thread split and jmp should never be reachable since they are expanded away before anything lands in the list
+                }
+                Instructions::Jmp(_) => {
+                    unreachable!()
+                }
+                Instructions::Match => {} // match already handled on first if check in the loop
             }
         }
         // Iteration done, update c_list, empty out n_list to prepare for the next iteration.
@@ -71,7 +98,6 @@ pub fn run(program: &[Instructions], input: &str) -> bool {
         n_list = vec![];
 
         if c_list.is_empty() {
-            println!("No match found");
             return false;
         }
     }

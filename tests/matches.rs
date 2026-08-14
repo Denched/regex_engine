@@ -21,7 +21,20 @@ mod tests {
             Instructions::Match,
         ]
     }
-
+    fn search_a_plus_program() -> Vec<Instructions> {
+        vec![
+            Instructions::Split(3, 1),
+            Instructions::Any,
+            Instructions::Jmp(0),
+            Instructions::Char(b'a'),
+            Instructions::Split(3, 5),
+            Instructions::Match,
+        ]
+    }
+    #[test]
+    fn search_a_plus_match() {
+        assert!(run(&search_a_plus_program(), "bbba"));
+    }
     #[test]
     fn ab_matches_ab() {
         assert!(run(&ab_program(), "ab"));
