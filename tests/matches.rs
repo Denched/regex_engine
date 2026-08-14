@@ -1,4 +1,4 @@
-use regex_engine::{Instructions, run};
+use regex_engine::{Instructions, Regex, Token, run, scanner};
 
 #[cfg(test)]
 mod tests {
@@ -59,5 +59,17 @@ mod tests {
     #[test]
     fn a_star_b_rejects_aa() {
         assert!(!run(&a_star_b_program(), "aa"));
+    }
+
+    #[test]
+    fn scans_escaped_star() {
+        assert_eq!(
+            scanner(r"a\*b"),
+            vec![
+                Token::Literal('a'),
+                Token::Literal('*'),
+                Token::Literal('b'),
+            ]
+        );
     }
 }

@@ -5,8 +5,34 @@ pub enum Instructions {
     Split(usize, usize),
     Match,
     Any,
+    Caret,
+    Dollar,
 }
 
+pub enum Regex {
+    Char(u8),
+    Any,
+    Concat(Box<Regex>, Box<Regex>),
+    Alt(Box<Regex>, Box<Regex>),
+    Star(Box<Regex>),
+    Plus(Box<Regex>),
+    Question(Box<Regex>),
+    Start,
+    End,
+}
+#[derive(Debug, PartialEq, Eq)]
+pub enum Token {
+    Literal(char),
+    Dot,        // '.'
+    Star,       // '*'
+    Plus,       // '+'
+    Question,   // '?'
+    Pipe,       // '|'
+    OpenParen,  // '('
+    CloseParen, // ')'
+    Caret,      // '^'
+    Dollar,     // '$'
+}
 /// Recursive function utilized to lazily add threads to the list and sets the base case as either CHAR or MATCH
 ///
 /// e.g
@@ -17,6 +43,8 @@ fn add_thread(
     visited: &mut Vec<usize>,
     pc: usize,
     program: &[Instructions],
+    sp: usize,
+    input_len: usize,
 ) {
     // Prevent inf loops so we dont keep visiting the same instruction twice in one step
     if list.contains(&pc) || visited.contains(&pc) {
@@ -28,11 +56,21 @@ fn add_thread(
             list.push(pc);
         } //base case
         Instructions::Jmp(target) => {
-            add_thread(list, visited, target, program);
+            add_thread(list, visited, target, program, sp, input_len);
         }
         Instructions::Split(t1, t2) => {
-            add_thread(list, visited, t1, program);
-            add_thread(list, visited, t2, program);
+            add_thread(list, visited, t1, program, sp, input_len);
+            add_thread(list, visited, t2, program, sp, input_len);
+        }
+        Instructions::Caret => {
+            if sp == 0 {
+                add_thread(list, visited, pc + 1, program, sp, input_len);
+            }
+        }
+        Instructions::Dollar => {
+            if sp == input_len {
+                add_thread(list, visited, pc + 1, program, sp, input_len);
+            }
         }
     }
 }
@@ -45,7 +83,7 @@ pub fn run(program: &[Instructions], input: &str) -> bool {
         let mut visited: Vec<usize> = vec![];
 
         // Add initial pc(s) in c_list at the very start of the program to process later
-        add_thread(&mut c_list, &mut visited, 0, program);
+        add_thread(&mut c_list, &mut visited, 0, program, 0, input.len());
     }
     // sp = current pos in the string
     for sp in 0..=input.len() {
@@ -75,19 +113,39 @@ pub fn run(program: &[Instructions], input: &str) -> bool {
             match program[pc] {
                 Instructions::Char(c) => {
                     if input.as_bytes().get(sp) == Some(&c) {
-                        add_thread(&mut n_list, &mut visited, pc + 1, program);
+                        add_thread(
+                            &mut n_list,
+                            &mut visited,
+                            pc + 1,
+                            program,
+                            sp + 1,
+                            input.len(),
+                        );
                     }
                 }
 
                 Instructions::Any => {
                     if input.as_bytes().get(sp).is_some() {
-                        add_thread(&mut n_list, &mut visited, pc + 1, program);
+                        add_thread(
+                            &mut n_list,
+                            &mut visited,
+                            pc + 1,
+                            program,
+                            sp + 1,
+                            input.len(),
+                        );
                     }
                 }
                 Instructions::Split(_, _) => {
                     unreachable!() // based on add_thread split and jmp should never be reachable since they are expanded away before anything lands in the list
                 }
                 Instructions::Jmp(_) => {
+                    unreachable!()
+                }
+                Instructions::Caret => {
+                    unreachable!()
+                }
+                Instructions::Dollar => {
                     unreachable!()
                 }
                 Instructions::Match => {} // match already handled on first if check in the loop
@@ -104,3 +162,38 @@ pub fn run(program: &[Instructions], input: &str) -> bool {
 
     false
 }
+
+pub fn scanner(input: &str) -> Vec<Token> {
+    let mut tokens = Vec::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        let token = match c {
+            '.' => Token::Dot,
+            '*' => Token::Star,
+            '+' => Token::Plus,
+            '?' => Token::Question,
+            '|' => Token::Pipe,
+            '(' => Token::OpenParen,
+            ')' => Token::CloseParen,
+            '^' => Token::Caret,
+            '$' => Token::Dollar,
+            '\\' => {
+                if let Some(escaped) = chars.next() {
+                    Token::Literal(escaped)
+                } else {
+                    Token::Literal('\\')
+                }
+            }
+            literal => Token::Literal(literal),
+        };
+        tokens.push(token);
+    }
+    tokens
+}
+
+pub fn parse(input: &str) {
+    let tokens = scanner(input);
+}
+
+pub fn compile(re: &Regex) {}
