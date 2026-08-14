@@ -1,4 +1,4 @@
-use regex_engine::{Instructions, Regex, Token, run, scanner};
+use regex_engine::{Instructions, Regex, Token, parse, run, scanner};
 
 #[cfg(test)]
 mod tests {
@@ -70,6 +70,22 @@ mod tests {
                 Token::Literal('*'),
                 Token::Literal('b'),
             ]
+        );
+    }
+
+    #[test]
+    fn parses_grouped_alternation_with_star() {
+        let re = parse("(a|b)*c");
+
+        assert_eq!(
+            re,
+            Regex::Concat(
+                Box::new(Regex::Star(Box::new(Regex::Alt(
+                    Box::new(Regex::Char(b'a')),
+                    Box::new(Regex::Char(b'b')),
+                )))),
+                Box::new(Regex::Char(b'c')),
+            )
         );
     }
 }

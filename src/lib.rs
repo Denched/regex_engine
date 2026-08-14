@@ -9,6 +9,7 @@ pub enum Instructions {
     Dollar,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Regex {
     Char(u8),
     Any,
@@ -192,8 +193,120 @@ pub fn scanner(input: &str) -> Vec<Token> {
     tokens
 }
 
-pub fn parse(input: &str) {
+// Rules (Will put in another file later)
+// Chapter 4-6 of Crafting Interpreters
+pub fn atom(tokens: &[Token], pos: &mut usize) -> Regex {
+    match tokens[*pos] {
+        Token::Literal(c) => {
+            *pos += 1;
+            Regex::Char(c as u8)
+        }
+        Token::Dot => {
+            *pos += 1;
+            Regex::Any
+        }
+        Token::Caret => {
+            *pos += 1;
+            Regex::Start
+        }
+        Token::Dollar => {
+            *pos += 1;
+            Regex::End
+        }
+        Token::OpenParen => {
+            *pos += 1;
+            let inner = regex(tokens, pos); // make a new "sub program" between the brackets and return it as a single atom again
+            //consume close paren
+            *pos += 1;
+            inner
+        }
+        _ => panic!("custom error msg should go here prob"),
+    }
+}
+pub fn repeat(tokens: &[Token], pos: &mut usize) -> Regex {
+    let atom_re = atom(tokens, pos);
+    // .get for out of bounds checks
+    match tokens.get(*pos) {
+        Some(Token::Star) => {
+            *pos += 1;
+            Regex::Star(Box::new(atom_re))
+        }
+        Some(Token::Plus) => {
+            *pos += 1;
+            Regex::Plus(Box::new(atom_re))
+        }
+        Some(Token::Question) => {
+            *pos += 1;
+            Regex::Question(Box::new(atom_re))
+        }
+        _ => atom_re, // no operator so return atom itself,
+    }
+}
+
+// Gather all adjacent items in a direct sequence and combine them into AST
+pub fn concat(tokens: &[Token], pos: &mut usize) -> Regex {
+    let repeat_re = repeat(tokens, pos);
+
+    let mut items = vec![repeat_re];
+
+    // Keep looking ahead and add tokens to items
+    while *pos < tokens.len() {
+        match tokens[*pos] {
+            Token::Pipe | Token::CloseParen => break,
+            _ => {
+                items.push(repeat(tokens, pos));
+            }
+        }
+    }
+
+    if items.len() == 1 {
+        items.pop().unwrap()
+    } else {
+        let mut iter = items.into_iter();
+        let first = iter.next().unwrap();
+
+        // Combines into a formal AST for elements in items
+        iter.fold(first, |acc, next| {
+            Regex::Concat(Box::new(acc), Box::new(next))
+        })
+    }
+}
+
+pub fn alternation(tokens: &[Token], pos: &mut usize) -> Regex {
+    let concat_re = concat(tokens, pos);
+
+    let mut items = vec![concat_re];
+    while *pos < tokens.len() {
+        match tokens[*pos] {
+            Token::Pipe => {
+                *pos += 1;
+                items.push(concat(tokens, pos));
+            }
+            _ => break,
+        }
+    }
+
+    if items.len() == 1 {
+        items.pop().unwrap()
+    } else {
+        let mut iter = items.into_iter();
+        let first = iter.next().unwrap();
+
+        // Combines into a formal AST for elements in items
+        iter.fold(first, |acc, next| Regex::Alt(Box::new(acc), Box::new(next)))
+    }
+}
+pub fn regex(tokens: &[Token], pos: &mut usize) -> Regex {
+    alternation(tokens, pos)
+}
+
+pub fn parse(input: &str) -> Regex {
     let tokens = scanner(input);
+
+    let mut pos = 0;
+    let result = regex(&tokens, &mut pos);
+
+    result
 }
 
 pub fn compile(re: &Regex) {}
