@@ -1,8 +1,15 @@
+//! Rules
+//! Main Structure that builds the AST through parsing from lowest to highest precedence.
+//! regex      := alternation
+//! alternation := concat ( '|' concat )*
+//! concat     := repeat ( repeat )*
+//! repeat     := atom ( '*' | '+' | '?' )?
+//! atom       := CHAR | '.' | '^' | '$' | '(' regex ')'
 use crate::{ParseError, Regex, Token, scanner};
 
-// Rules
-// Chapter 4-6 of Crafting Interpreters
-pub fn atom(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
+// Ref : Chapter 4-6 of Crafting Interpreters
+
+fn atom(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
     let token = tokens.get(*pos).ok_or(ParseError::UnexpectedEnd)?;
 
     match token {
@@ -40,7 +47,7 @@ pub fn atom(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
         _ => Err(ParseError::UnexpectedToken(*pos)),
     }
 }
-pub fn repeat(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
+fn repeat(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
     let atom_re = atom(tokens, pos)?;
     // .get for out of bounds checks
     match tokens.get(*pos) {
@@ -61,7 +68,7 @@ pub fn repeat(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
 }
 
 // Gather all adjacent items in a direct sequence and combine them into AST
-pub fn concat(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
+fn concat(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
     let repeat_re = repeat(tokens, pos)?;
 
     let mut items = vec![repeat_re];
@@ -89,7 +96,7 @@ pub fn concat(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
     }
 }
 
-pub fn alternation(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
+fn alternation(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
     let concat_re = concat(tokens, pos)?;
 
     let mut items = vec![concat_re];
@@ -113,10 +120,27 @@ pub fn alternation(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseErro
         Ok(iter.fold(first, |acc, next| Regex::Alt(Box::new(acc), Box::new(next))))
     }
 }
-pub fn regex(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
+fn regex(tokens: &[Token], pos: &mut usize) -> Result<Regex, ParseError> {
     alternation(tokens, pos)
 }
 
+/// Parses a regex string into an Abstract Syntax Tree (AST).
+/// # Examples
+///
+/// ```
+/// use regex_engine::{parse, Regex};
+///
+/// let ast = parse("a|b*").unwrap();
+///
+/// // Here the parser groups `b*` together before the `|`
+/// assert_eq!(
+///     ast,
+///     Regex::Alt(
+///         Box::new(Regex::Char(b'a')),
+///         Box::new(Regex::Star(Box::new(Regex::Char(b'b'))))
+///     )
+/// );
+/// ```
 pub fn parse(input: &str) -> Result<Regex, ParseError> {
     let tokens = scanner(input);
 

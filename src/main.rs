@@ -1,5 +1,6 @@
 use regex_engine::{compile_search, parse, run};
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
+
 fn main() {
     let pattern = match std::env::args().nth(1) {
         Some(p) => p,
@@ -20,6 +21,9 @@ fn main() {
     let program = compile_search(&ast);
 
     let stdin = io::stdin();
+
+    print!("String: ");
+    io::stdout().flush().expect("err");
     for line in stdin.lock().lines() {
         let line = line.expect("read failed");
         if run(&program, &line) {
@@ -27,5 +31,8 @@ fn main() {
         } else {
             println!("Failed match");
         }
+
+        print!("String: ");
+        io::stdout().flush().expect("err");
     }
 }

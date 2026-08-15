@@ -4,8 +4,6 @@ use regex_engine::*;
 mod compiler_tests {
     use super::*;
 
-    // ---------- shift ----------
-
     #[test]
     fn shift_char_unchanged() {
         let prog = vec![

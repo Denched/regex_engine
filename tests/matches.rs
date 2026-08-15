@@ -1,4 +1,4 @@
-use regex_engine::{Instructions, ParseError, Regex, Token, parse, run, scanner};
+use regex_engine::{Instructions, Regex, Token, parse, run, scanner};
 
 #[cfg(test)]
 mod tests {

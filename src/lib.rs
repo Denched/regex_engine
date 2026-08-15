@@ -1,6 +1,10 @@
+//! Regex Engine
+//! Utilises Pike VM architecture
+//! Runs each step from scanner -> parsing -> compiling(bytecode) -> execute to calculate the regex expression and pattern match
+
 pub mod rules;
 
-pub use rules::{alternation, atom, concat, parse, regex, repeat};
+pub use rules::parse;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instructions {
@@ -20,6 +24,8 @@ pub enum ParseError {
     TrailingTokens(usize),
     DanglingOperator(usize), // e.g. "*ab" — operator with no atom before it
 }
+
+/// AST representation of a regex expression
 #[derive(Debug, PartialEq, Eq)]
 pub enum Regex {
     Char(u8),
@@ -45,11 +51,7 @@ pub enum Token {
     Caret,      // '^'
     Dollar,     // '$'
 }
-/// Recursive function utilized to lazily add threads to the list and sets the base case as either CHAR or MATCH
-///
-/// e.g
-/// add_thread(&mut c_list, &mut visited, 0, &program);
-/// add_thread(&mut n_list, &mut visited, pc + 1, &program);
+// Recursive function utilized to lazily add threads to the list and sets the base case as either CHAR or MATCH
 fn add_thread(
     list: &mut Vec<usize>,
     visited: &mut Vec<usize>,
@@ -175,6 +177,7 @@ pub fn run(program: &[Instructions], input: &str) -> bool {
     false
 }
 
+// Use raw chars to form tokens for parsing later
 pub fn scanner(input: &str) -> Vec<Token> {
     let mut tokens = Vec::new();
     let mut chars = input.chars().peekable();
@@ -233,7 +236,7 @@ pub fn compile(re: &Regex) -> Vec<Instructions> {
         }
 
         Regex::Alt(a, b) => {
-            let mut compile_a = compile(a); // recurse down left tree
+            let compile_a = compile(a); // recurse down left tree
             let compile_b = compile(b); // right tree
 
             let a_start = 1;
@@ -295,11 +298,13 @@ pub fn compile(re: &Regex) -> Vec<Instructions> {
     }
 }
 
+/// Anchored search (Only searches for the pattern at the start of the string)
 pub fn compile_program(re: &Regex) -> Vec<Instructions> {
     let mut program = compile(re);
     program.push(Instructions::Match);
     program
 }
+/// Unanchored search (Searches for a pattern at any part of the string)
 pub fn compile_search(re: &Regex) -> Vec<Instructions> {
     let compiled = compile(re);
 
@@ -319,8 +324,33 @@ pub fn compile_search(re: &Regex) -> Vec<Instructions> {
     program
 }
 
+/// Evaluates whether a regular expression matches any part of the given input string.
+///
+///
+///
+/// # Examples
+///
+/// ```
+/// use regex_engine::is_match;
+///
+/// // Success!
+/// assert_eq!(is_match("a|b*c", "ac").unwrap(), true);
+/// assert_eq!(is_match("a|b*c", "bbbc").unwrap(), true);
+///
+/// // Fail!
+/// assert_eq!(is_match("a|b*c", "z").unwrap(), false);
+///
+/// // Invalid!
+/// assert!(is_match("*abc", "abc").is_err());
+/// ```
 pub fn is_match(pattern: &str, input: &str) -> Result<bool, ParseError> {
     let ast = parse(pattern)?;
     let program = compile_search(&ast);
     Ok(run(&program, input))
 }
+
+// pub fn is_match_at_start(pattern: &str, input: &str) -> Result<bool, ParseError> {
+//     let ast = parse(pattern)?;
+//     let program = compile_program(&ast);
+//     Ok(run(&program, input))
+// }
