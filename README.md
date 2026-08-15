@@ -1,6 +1,6 @@
 <div align="center">
   <h1><b>regex_engine</b></h1>
-  <p>A regular expression engine in Rust with guaranteed linear-time matching — no exponential backtracking </p>
+  <p>A regular expression engine in Rust with guaranteed linear-time matching, no catastrophic backtracking </p>
   <img src="https://github.com/Denched/regex_engine/actions/workflows/rust.yml/badge.svg" alt="CI" />
 </div>
 
