@@ -1,11 +1,9 @@
 <div align="center">
   <h1><b>regex_engine</b></h1>
-  <p>
-    A regular expression engine in Rust with guaranteed linear-time matching — no catastrophic backtracking, ever.
-  </p>
-  ![CI](https://github.com/Denched/regex_engine/actions/workflows/rust.yml/badge.svg)
-
+  <p>A regular expression engine in Rust...</p>
+  <img src="https://github.com/Denched/regex_engine/actions/workflows/rust.yml/badge.svg" alt="CI" />
 </div>
+
 <!-- <div align="center">
   <img src="./assets/demo.gif" width="800" alt="regex_engine CLI demo" />
 </div> -->
