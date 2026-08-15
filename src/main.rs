@@ -1,23 +1,31 @@
-use regex_engine::{Instructions, run};
-use std::io;
-
+use regex_engine::{compile_search, parse, run};
+use std::io::{self, BufRead};
 fn main() {
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).expect("Input failed");
-    let input = input.trim_end();
+    let pattern = match std::env::args().nth(1) {
+        Some(p) => p,
+        None => {
+            eprintln!("usage: regex_engine <pattern>");
+            std::process::exit(1);
+        }
+    };
 
-    let program = vec![
-        Instructions::Caret,
-        Instructions::Char(b'a'),
-        Instructions::Char(b'b'),
-        Instructions::Char(b'c'),
-        Instructions::Dollar,
-        Instructions::Match,
-    ];
+    let ast = match parse(&pattern) {
+        Ok(ast) => ast,
+        Err(e) => {
+            eprintln!("invalid pattern: {:?}", e);
+            std::process::exit(1);
+        }
+    };
 
-    if run(&program, input) {
-        println!("match");
-    } else {
-        println!("no match");
+    let program = compile_search(&ast);
+
+    let stdin = io::stdin();
+    for line in stdin.lock().lines() {
+        let line = line.expect("read failed");
+        if run(&program, &line) {
+            println!("{}", line);
+        } else {
+            println!("Failed match");
+        }
     }
 }

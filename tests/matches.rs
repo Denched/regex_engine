@@ -1,7 +1,9 @@
-use regex_engine::{Instructions, Regex, Token, parse, run, scanner};
+use regex_engine::{Instructions, ParseError, Regex, Token, parse, run, scanner};
 
 #[cfg(test)]
 mod tests {
+    use regex_engine::ParseError;
+
     use super::*;
 
     fn ab_program() -> Vec<Instructions> {
@@ -74,8 +76,8 @@ mod tests {
     }
 
     #[test]
-    fn parses_grouped_alternation_with_star() {
-        let re = parse("(a|b)*c");
+    fn parses_grouped_alternation_with_star() -> Result<(), ParseError> {
+        let re = parse("(a|b)*c")?;
 
         assert_eq!(
             re,
@@ -87,5 +89,7 @@ mod tests {
                 Box::new(Regex::Char(b'c')),
             )
         );
+
+        Ok(())
     }
 }

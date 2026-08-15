@@ -1,4 +1,8 @@
-#[derive(Debug, Clone, Copy)]
+pub mod rules;
+
+pub use rules::{alternation, atom, concat, parse, regex, repeat};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instructions {
     Char(u8),   // carries which byte
     Jmp(usize), // usize as target index
@@ -8,7 +12,14 @@ pub enum Instructions {
     Caret,
     Dollar,
 }
-
+#[derive(Debug, PartialEq, Eq)]
+pub enum ParseError {
+    UnexpectedToken(usize), // position in token stream
+    UnexpectedEnd,
+    UnmatchedParen(usize),
+    TrailingTokens(usize),
+    DanglingOperator(usize), // e.g. "*ab" — operator with no atom before it
+}
 #[derive(Debug, PartialEq, Eq)]
 pub enum Regex {
     Char(u8),
@@ -193,120 +204,123 @@ pub fn scanner(input: &str) -> Vec<Token> {
     tokens
 }
 
-// Rules (Will put in another file later)
-// Chapter 4-6 of Crafting Interpreters
-pub fn atom(tokens: &[Token], pos: &mut usize) -> Regex {
-    match tokens[*pos] {
-        Token::Literal(c) => {
-            *pos += 1;
-            Regex::Char(c as u8)
-        }
-        Token::Dot => {
-            *pos += 1;
-            Regex::Any
-        }
-        Token::Caret => {
-            *pos += 1;
-            Regex::Start
-        }
-        Token::Dollar => {
-            *pos += 1;
-            Regex::End
-        }
-        Token::OpenParen => {
-            *pos += 1;
-            let inner = regex(tokens, pos); // make a new "sub program" between the brackets and return it as a single atom again
-            //consume close paren
-            *pos += 1;
-            inner
-        }
-        _ => panic!("custom error msg should go here prob"),
-    }
-}
-pub fn repeat(tokens: &[Token], pos: &mut usize) -> Regex {
-    let atom_re = atom(tokens, pos);
-    // .get for out of bounds checks
-    match tokens.get(*pos) {
-        Some(Token::Star) => {
-            *pos += 1;
-            Regex::Star(Box::new(atom_re))
-        }
-        Some(Token::Plus) => {
-            *pos += 1;
-            Regex::Plus(Box::new(atom_re))
-        }
-        Some(Token::Question) => {
-            *pos += 1;
-            Regex::Question(Box::new(atom_re))
-        }
-        _ => atom_re, // no operator so return atom itself,
-    }
-}
-
-// Gather all adjacent items in a direct sequence and combine them into AST
-pub fn concat(tokens: &[Token], pos: &mut usize) -> Regex {
-    let repeat_re = repeat(tokens, pos);
-
-    let mut items = vec![repeat_re];
-
-    // Keep looking ahead and add tokens to items
-    while *pos < tokens.len() {
-        match tokens[*pos] {
-            Token::Pipe | Token::CloseParen => break,
-            _ => {
-                items.push(repeat(tokens, pos));
-            }
-        }
-    }
-
-    if items.len() == 1 {
-        items.pop().unwrap()
-    } else {
-        let mut iter = items.into_iter();
-        let first = iter.next().unwrap();
-
-        // Combines into a formal AST for elements in items
-        iter.fold(first, |acc, next| {
-            Regex::Concat(Box::new(acc), Box::new(next))
+// Shift so the positions still mean the same thing after being relocated
+pub fn shift(program: Vec<Instructions>, offset: usize) -> Vec<Instructions> {
+    program
+        .into_iter()
+        .map(|inst| match inst {
+            Instructions::Jmp(target) => Instructions::Jmp(target + offset),
+            Instructions::Split(t1, t2) => Instructions::Split(t1 + offset, t2 + offset),
+            other => other,
         })
-    }
+        .collect()
 }
+// recursive, every node gets its own independent bytecode and parent nodes stitch them together as we unwind up back the AST tree
+pub fn compile(re: &Regex) -> Vec<Instructions> {
+    match re {
+        Regex::Char(c) => vec![Instructions::Char(*c)], //leaf nodes
+        Regex::Any => vec![Instructions::Any],
+        Regex::Start => vec![Instructions::Caret],
+        Regex::End => vec![Instructions::Dollar],
+        Regex::Concat(a, b) => {
+            let compile_a = compile(a); // recurse down left tree
+            let compile_b = compile(b); // right tree
+            let a_len = compile_a.len();
+            let mut program = compile_a;
 
-pub fn alternation(tokens: &[Token], pos: &mut usize) -> Regex {
-    let concat_re = concat(tokens, pos);
+            program.extend(shift(compile_b, a_len)); // combine them together
+            program
+        }
 
-    let mut items = vec![concat_re];
-    while *pos < tokens.len() {
-        match tokens[*pos] {
-            Token::Pipe => {
-                *pos += 1;
-                items.push(concat(tokens, pos));
-            }
-            _ => break,
+        Regex::Alt(a, b) => {
+            let mut compile_a = compile(a); // recurse down left tree
+            let compile_b = compile(b); // right tree
+
+            let a_start = 1;
+            let jmp_pos = a_start + compile_a.len();
+            let b_start = jmp_pos + 1;
+            let end = b_start + compile_b.len();
+            // Reference
+            //             Index                           Instruction
+            // ─────────────────────────────────────────────────────────────────────────────
+            // 0                               Split(a_start, b_start)  ◄── Fork to 'a' or 'b'
+            // a_start (1)                     ┌──────────────────────┐
+            // ...                             │   Bytecode for 'a'   │
+            // jmp_pos (1 + len(a))            └──────────────────────┘
+            //                                 Jmp(end)                 ◄── Skip 'b' if 'a' matched
+            // b_start (jmp_pos + 1)           ┌──────────────────────┐
+            // ...                             │   Bytecode for 'b'   │
+            // end     (b_start + len(b))      └──────────────────────┘
+            //                                 <Next Instruction>       ◄── Both paths exit here
+            let mut program = vec![Instructions::Split(a_start, b_start)];
+
+            program.extend(shift(compile_a, a_start));
+            program.push(Instructions::Jmp(end));
+            program.extend(shift(compile_b, b_start));
+            program
+        }
+        Regex::Star(inner) => {
+            let compile_inner = compile(inner);
+            let inner_len = compile_inner.len();
+            let mut result = Vec::new();
+
+            // inner index starts at 1 due to split, 1 + inner_len + 1 goes to the next pattern past jmp
+            result.push(Instructions::Split(1, 1 + inner_len + 1));
+            result.extend(shift(compile_inner, 1));
+            result.push(Instructions::Jmp(0)); // Jump back to split
+            result
+        }
+        Regex::Plus(inner) => {
+            let compile_inner = compile(inner);
+            let inner_len = compile_inner.len();
+
+            let mut result = Vec::new();
+
+            result.extend(compile_inner);
+            result.push(Instructions::Split(0, inner_len + 1));
+
+            result
+        }
+        Regex::Question(inner) => {
+            let compile_inner = compile(inner);
+            let inner_len = compile_inner.len();
+
+            let mut result = Vec::new();
+
+            result.push(Instructions::Split(1, inner_len + 1));
+            result.extend(shift(compile_inner, 1));
+
+            result
         }
     }
-
-    if items.len() == 1 {
-        items.pop().unwrap()
-    } else {
-        let mut iter = items.into_iter();
-        let first = iter.next().unwrap();
-
-        // Combines into a formal AST for elements in items
-        iter.fold(first, |acc, next| Regex::Alt(Box::new(acc), Box::new(next)))
-    }
-}
-pub fn regex(tokens: &[Token], pos: &mut usize) -> Regex {
-    alternation(tokens, pos)
 }
 
-pub fn parse(input: &str) -> Regex {
-    let tokens = scanner(input);
+pub fn compile_program(re: &Regex) -> Vec<Instructions> {
+    let mut program = compile(re);
+    program.push(Instructions::Match);
+    program
+}
+pub fn compile_search(re: &Regex) -> Vec<Instructions> {
+    let compiled = compile(re);
 
-    let mut pos = 0;
-    let result = regex(&tokens, &mut pos);
+    // Start with .*?, search anywhere in the list unanchored
+    let prefix = vec![
+        Instructions::Split(3, 1),
+        Instructions::Any,
+        Instructions::Jmp(0),
+    ];
 
-    result
+    let prefix_len = prefix.len();
+
+    let mut program = prefix;
+
+    program.extend(shift(compiled, prefix_len));
+    program.push(Instructions::Match);
+    program
 }
 
-pub fn compile(re: &Regex) {}
+pub fn is_match(pattern: &str, input: &str) -> Result<bool, ParseError> {
+    let ast = parse(pattern)?;
+    let program = compile_search(&ast);
+    Ok(run(&program, input))
+}
