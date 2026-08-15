@@ -8,3 +8,8 @@ edition = "2024"
 [dev-dependencies]
 regex = "1"
 proptest = "1"
+criterion = "0.8.2"
+
+[[bench]]
+name = "matching"
+harness = false

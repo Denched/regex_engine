@@ -349,6 +349,21 @@ pub fn is_match(pattern: &str, input: &str) -> Result<bool, ParseError> {
     Ok(run(&program, input))
 }
 
+pub fn disassemble(program: &[Instructions]) {
+    for (i, inst) in program.iter().enumerate() {
+        let text = match inst {
+            Instructions::Char(c) => format!("char {:?}", *c as char),
+            Instructions::Any => "any".to_string(),
+            Instructions::Jmp(t) => format!("jmp {}", t),
+            Instructions::Split(a, b) => format!("split {}, {}", a, b),
+            Instructions::Caret => "caret".to_string(),
+            Instructions::Dollar => "dollar".to_string(),
+            Instructions::Match => "match".to_string(),
+        };
+        println!("{:>3}: {}", i, text);
+    }
+}
+
 // pub fn is_match_at_start(pattern: &str, input: &str) -> Result<bool, ParseError> {
 //     let ast = parse(pattern)?;
 //     let program = compile_program(&ast);
